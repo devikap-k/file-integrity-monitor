@@ -1,5 +1,26 @@
 """
-File Integrity Monitor (FIM) & Detection Engine
+Advanced Python File Integrity Monitor (FIM) & Detection Engine
+-----------------------------------------------------------------
+Fixes applied over the original version:
+  1. Path normalization (baseline keys vs. watchdog event paths now match)
+  2. Correct hash-algorithm handling (invalid algo no longer silently
+     desyncs the stored baseline)
+  3. on_opened now actually works (explicit event_filter passed to
+     observer.schedule, which watchdog requires for FileOpenedEvent)
+  4. Basic debounce so editors that fire multiple events per save don't
+     spam duplicate alerts
+  5. Optional recursive watching
+  6. Persistent, timestamped audit log (fim.log) in addition to console
+     output, so alerts survive after the terminal closes
+  7. Baseline tamper-evidence: baseline.json is chmod'd read-only (0400)
+     after creation, and a hash-of-the-baseline-file is stored separately
+     (baseline.sig) so tampering with baseline.json to "match" a modified
+     file can itself be detected on watch startup
+  8. Broader exception handling (PermissionError, OSError) so a locked
+     or permission-denied file doesn't crash the watcher thread
+  9. baseline.sig unlock-before-write fix: protect_baseline() now resets
+     permissions on baseline.sig before overwriting it, so regenerating
+     the baseline a second time no longer throws PermissionError
 """
 
 import hashlib
@@ -109,6 +130,14 @@ def protect_baseline(algo):
     rewrite both files), but it closes the trivial "just edit baseline.json
     to match the new hash" bypass a plain read/write JSON file allows.
     """
+    # baseline.sig may already exist read-only from a previous run —
+    # unlock it before attempting to overwrite it.
+    if os.path.exists(BASELINE_SIG_FILE):
+        try:
+            os.chmod(BASELINE_SIG_FILE, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
+
     baseline_hash = hash_file_contents(BASELINE_FILE, algo)
     with open(BASELINE_SIG_FILE, "w") as f:
         json.dump({"algorithm": algo, "baseline_hash": baseline_hash}, f, indent=4)
