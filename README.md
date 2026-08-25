@@ -1,16 +1,16 @@
-# File Integrity Monitor (FIM) & Detection Engine
+# FileGuard — Real-Time File Integrity Monitor and Detection
 
 A lightweight, host-based intrusion detection system (HIDS) built in Python. It offers real-time file tracking, cryptographic verification, swappable hash algorithms, tamper-evident baselines, and persistent audit logging.
 
 ---
 
 ## Table of Contents
-- [Features](#-features)
-- [Known Limitations](#️-known-limitations)
-- [Tech Stack](#️-tech-stack)
-- [Quick Start](#️-quick-start)
-- [Testing](#-testing)
-- [Files Produced](#-files-produced)
+- [Features](#features)
+- [Known Limitations](#known-limitations)
+- [Tech Stack](#tech-stack)
+- [Quick Start](#quick-start)
+- [Testing](#testing)
+- [Files Produced](#files-produced)
 
 ---
 
@@ -22,6 +22,7 @@ A lightweight, host-based intrusion detection system (HIDS) built in Python. It 
 | **Swappable Hash Algorithms** | Configurable via `config.json` (`sha256`, `sha512`, etc.). Invalid algorithms fall back safely to `sha256` instead of silently corrupting the baseline. |
 | **Correct Path Matching** | Baseline keys and live filesystem events are both normalized to absolute paths, so integrity checks compare like with like — no false-positive violations. |
 | **Tamper-Evident Baseline** | `baseline.json` is locked read-only (`chmod 400`) after creation, and its own hash is stored in `baseline.sig`. Any direct edit to hide a change is detected on the next watch startup and blocked unless explicitly overridden. |
+| **Reliable Baseline Regeneration** | `baseline.sig` permissions are automatically unlocked before being rewritten, so running `python3 fim.py b` repeatedly to refresh the baseline no longer fails with a permission error. |
 | **Persistent Audit Log** | All alerts are written to `fim.log` with timestamps, in addition to the console — so you have evidence after the terminal closes. |
 | **Debounced Alerts** | Duplicate events fired by editors/OS within a short window are collapsed instead of spamming the console. |
 
@@ -34,6 +35,7 @@ Being upfront about what this tool does **not** protect against:
 - An attacker with root access can still rewrite both `baseline.json` and `baseline.sig` together. True tamper resistance requires storing the baseline off-host or cryptographically signing it with a key the monitored host doesn't have.
 - `on_opened` (access-attempt) events depend on your `watchdog` version and OS backend (inotify on Linux). If unsupported, the tool logs a notice and continues without them rather than failing silently.
 - Watching is **non-recursive by default**; pass `-r` to `w` for recursive watching of subdirectories.
+- **`fim.log` lives inside the watched directory by default.** Since the tool watches its own current folder, every alert written to `fim.log` triggers a new file-modified event on the log itself, producing recursive-looking log entries. This doesn't affect detection accuracy but does add console noise. To avoid it, move `LOG_FILE` outside the monitored directory (e.g. a `logs/` subfolder or `/var/log/fileguard/fim.log`).
 
 ---
 
@@ -74,7 +76,7 @@ echo "DB_USER=admin" > config.txt
 ```bash
 python3 fim.py b
 ```
-Creates `baseline.json` (read-only) and `baseline.sig`.
+Creates `baseline.json` (read-only) and `baseline.sig`. Safe to re-run any time you need to refresh the baseline.
 
 **6. Launch real-time watch mode**
 ```bash
@@ -94,6 +96,7 @@ python3 fim.py w -r
 | Deletion detection | `rm secrets.txt` | `File Deleted` alert, flagged as a baselined asset |
 | Access detection | `cat config.txt` | `ACCESS` alert (platform-dependent) |
 | Tamper detection | Hand-edit a hash in `baseline.json`, then re-run `python3 fim.py w` | `BASELINE TAMPERING DETECTED`, watch mode blocked until confirmed |
+| Baseline regeneration | Run `python3 fim.py b` twice in a row | Both runs succeed with no `PermissionError` |
 
 Check `fim.log` afterward to confirm every alert was also written there with a timestamp.
 
