@@ -1,23 +1,5 @@
 """
-Advanced Python File Integrity Monitor (FIM) & Detection Engine
------------------------------------------------------------------
-Fixes applied over the original version:
-  1. Path normalization (baseline keys vs. watchdog event paths now match)
-  2. Correct hash-algorithm handling (invalid algo no longer silently
-     desyncs the stored baseline)
-  3. on_opened now actually works (explicit event_filter passed to
-     observer.schedule, which watchdog requires for FileOpenedEvent)
-  4. Basic debounce so editors that fire multiple events per save don't
-     spam duplicate alerts
-  5. Optional recursive watching
-  6. Persistent, timestamped audit log (fim.log) in addition to console
-     output, so alerts survive after the terminal closes
-  7. Baseline tamper-evidence: baseline.json is chmod'd read-only (0400)
-     after creation, and a hash-of-the-baseline-file is stored separately
-     (baseline.sig) so tampering with baseline.json to "match" a modified
-     file can itself be detected on watch startup
-  8. Broader exception handling (PermissionError, OSError) so a locked
-     or permission-denied file doesn't crash the watcher thread
+File Integrity Monitor (FIM) & Detection Engine
 """
 
 import hashlib
